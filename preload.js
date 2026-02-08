@@ -9,22 +9,22 @@ window.addEventListener('online', updateNetworkStatus);
 window.addEventListener('offline', updateNetworkStatus);
 
 // Listen for DOMContentLoaded event
-window.addEventListener('DOMContentLoaded', () => {
-    // Send initial network status to main process on page load
-    updateNetworkStatus();
+window.addEventListener('DOMContentLoaded', async () => {
     // Wire up retry button on offline page
     const retryBtn = document.getElementById('retry-btn');
     if (retryBtn) {
         retryBtn.addEventListener('click', () => {
             ipcRenderer.send('retry-connection');
         });
+    } else {
+        // Only send initial network status if NOT on offline page
+        // to avoid triggering reload loops
+        updateNetworkStatus();
     }
 
-    // Hosts allowed to navigate within the Electron window
-    const allowedHosts = new Set([
-        'gemini.google.com',
-        'accounts.google.com',
-    ]);
+    // Fetch allowed hosts from main process (centralized source of truth)
+    const allowedHostsList = await ipcRenderer.invoke('get-allowed-hosts');
+    const allowedHosts = new Set(allowedHostsList);
 
     // Listen for click events and open non-allowed links externally
     document.addEventListener('click', (event) => {
