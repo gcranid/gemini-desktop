@@ -259,21 +259,15 @@ function createWindow () {
       try {
         // Properly parse file URL and validate it's within app directory
         const parsedFileUrl = new URL(url);
-        if (parsedFileUrl.protocol !== 'file:') {
-          console.warn('will-navigate: expected file:// protocol', url);
-          event.preventDefault();
-          return;
-        }
-        
         const filePath = normalize(fileURLToPath(parsedFileUrl));
         const appDir = normalize(__dirname);
-        const rel = relative(appDir, filePath);
+        const relativePath = relative(appDir, filePath);
         
         // Check if the relative path doesn't escape the app directory
         // - Empty string means filePath equals appDir (app directory root itself) - ALLOW
         // - Path not starting with '..' means it's within the app directory - ALLOW
         // - Path starting with '..' means it escapes the app directory - BLOCK
-        if (rel === '' || !rel.startsWith('..')) {
+        if (relativePath === '' || !relativePath.startsWith('..')) {
           console.log('will-navigate: allowing app-internal file:// protocol', url);
           return;
         } else {

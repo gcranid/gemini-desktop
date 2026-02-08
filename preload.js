@@ -28,8 +28,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Fetch allowed hosts from main process (centralized source of truth)
     let allowedHosts;
     try {
-        const allowedHostsList = await ipcRenderer.invoke('get-allowed-hosts');
-        allowedHosts = new Set(allowedHostsList);
+        const allowedHostsArray = await ipcRenderer.invoke('get-allowed-hosts');
+        allowedHosts = new Set(allowedHostsArray);
     } catch (e) {
         console.error('Failed to fetch allowed hosts from main process:', e);
         // Fallback to default hosts if IPC fails
