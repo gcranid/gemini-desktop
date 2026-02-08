@@ -11,18 +11,30 @@ const icon = nativeImage.createFromPath(join(__dirname, 'icon.png'));
 // IPC listeners (registered once, outside createWindow to avoid leaks)
 ipcMain.on('zoom-in', () => {
   console.log('zoom-in');
+  if (!win || win.isDestroyed()) {
+    console.warn('zoom-in: window not available');
+    return;
+  }
   const currentZoom = win.webContents.getZoomLevel();
   win.webContents.setZoomLevel(currentZoom + 1);
 });
 
 ipcMain.on('zoom-out', () => {
   console.log('zoom-out');
+  if (!win || win.isDestroyed()) {
+    console.warn('zoom-out: window not available');
+    return;
+  }
   const currentZoom = win.webContents.getZoomLevel();
   win.webContents.setZoomLevel(currentZoom - 1);
 });
 
 ipcMain.on('zoom-reset', () => {
   console.log('zoom-reset');
+  if (!win || win.isDestroyed()) {
+    console.warn('zoom-reset: window not available');
+    return;
+  }
   win.webContents.setZoomLevel(0);
 });
 
@@ -41,6 +53,10 @@ ipcMain.on('open-external-link', (event, url) => {
 // Retry connection from offline page
 ipcMain.on('retry-connection', () => {
   console.log('Retrying connection...');
+  if (!win || win.isDestroyed()) {
+    console.warn('retry-connection: window not available');
+    return;
+  }
   wasOffline = false;
   win.loadURL(appURL);
 });
@@ -49,6 +65,10 @@ ipcMain.on('retry-connection', () => {
 // Only act on transitions to avoid reload loops
 ipcMain.on('network-status', (event, isOnline) => {
   console.log(`Network status: ${isOnline ? 'online' : 'offline'}`);
+  if (!win || win.isDestroyed()) {
+    console.warn('network-status: window not available');
+    return;
+  }
   if (isOnline && wasOffline) {
     wasOffline = false;
     win.loadURL(appURL);
@@ -121,10 +141,35 @@ function createWindow () {
   win.loadURL(appURL);
 
   // Show offline page if the URL fails to load (e.g. no internet)
+  // Filter by network-related error codes to avoid incorrectly treating
+  // in-app navigations/redirects as offline
   win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.log(`did-fail-load: ${errorDescription} (${errorCode})`);
-    wasOffline = true;
-    win.loadFile('offline.html');
+    
+    // Network-related error codes that should trigger offline page
+    const networkErrors = [
+      -2,   // ERR_FAILED (generic network failure - may include some non-network cases)
+      -7,   // ERR_TIMED_OUT
+      -21,  // ERR_NETWORK_CHANGED
+      -100, // ERR_CONNECTION_CLOSED
+      -101, // ERR_CONNECTION_RESET
+      -102, // ERR_CONNECTION_REFUSED
+      -103, // ERR_CONNECTION_ABORTED
+      -104, // ERR_CONNECTION_FAILED
+      -105, // ERR_NAME_NOT_RESOLVED
+      -106, // ERR_INTERNET_DISCONNECTED
+      -109, // ERR_ADDRESS_UNREACHABLE
+      -118, // ERR_CONNECTION_TIMED_OUT
+      -137, // ERR_NAME_RESOLUTION_FAILED
+      -324, // ERR_EMPTY_RESPONSE
+    ];
+    
+    if (networkErrors.includes(errorCode)) {
+      wasOffline = true;
+      win.loadFile('offline.html');
+    } else {
+      console.log(`did-fail-load: ignoring non-network error ${errorCode}`);
+    }
   });
 
   // Hosts allowed to navigate within the Electron window
@@ -135,11 +180,39 @@ function createWindow () {
 
   // Intercept navigation and only allow app + auth hosts in-app
   win.webContents.on('will-navigate', (event, url) => {
-    const targetHost = new URL(url).host;
-    if (!allowedHosts.has(targetHost)) {
-      console.log('will-navigate external: ', url);
+    // Allow file:// protocol only for app-internal files
+    if (url.startsWith('file://')) {
+      // Ensure file:// URLs are within the app directory for security
+      const filePath = url.replace('file://', '');
+      if (filePath.startsWith(__dirname)) {
+        console.log('will-navigate: allowing app-internal file:// protocol', url);
+        return;
+      } else {
+        console.warn('will-navigate: blocked file:// URL outside app directory', url);
+        event.preventDefault();
+        return;
+      }
+    }
+    
+    try {
+      const parsedUrl = new URL(url);
+      const targetHost = parsedUrl.host;
+      
+      // Only handle http(s) protocols - prevent potentially unsafe protocols
+      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+        if (!allowedHosts.has(targetHost)) {
+          console.log('will-navigate external: ', url);
+          event.preventDefault();
+          shell.openExternal(url);
+        }
+      } else {
+        // Block other protocols (javascript:, data:, etc.) as they could be unsafe
+        console.warn('will-navigate: blocked unsafe protocol', parsedUrl.protocol, url);
+        event.preventDefault();
+      }
+    } catch (e) {
+      console.warn('will-navigate: invalid URL, preventing navigation', url, e);
       event.preventDefault();
-      shell.openExternal(url);
     }
   });
 
