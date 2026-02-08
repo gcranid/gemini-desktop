@@ -177,6 +177,25 @@ if (!firstInstance) {
 } else {
   app.on("second-instance", (event) => {
     console.log("second-instance");
+
+    // If the main window doesn't exist yet (or was destroyed), create it
+    if (!win || win.isDestroyed()) {
+      if (app.isReady()) {
+        createWindow();
+      } else {
+        app.whenReady().then(() => {
+          if (!win || win.isDestroyed()) {
+            createWindow();
+          }
+        });
+      }
+      return;
+    }
+
+    // If the window exists, restore and focus it
+    if (win.isMinimized()) {
+      win.restore();
+    }
     win.show();
     win.focus();
   });
