@@ -201,7 +201,8 @@ function createWindow () {
           const failedUrl = new URL(validatedURL);
           const expectedUrl = new URL(appURL);
           
-          // Check if protocol and hostname match
+          // Check if protocol and hostname match (pathname is intentionally ignored
+          // so that any page on the app domain that fails to load shows the offline page)
           if (failedUrl.protocol !== expectedUrl.protocol || 
               failedUrl.hostname !== expectedUrl.hostname) {
             console.log(
@@ -264,10 +265,9 @@ function createWindow () {
         const relativePath = relative(appDir, filePath);
         
         // Check if the relative path doesn't escape the app directory
-        // - Empty string means filePath equals appDir (app directory root itself) - ALLOW
-        // - Path not starting with '..' means it's within the app directory - ALLOW
-        // - Path starting with '..' means it escapes the app directory - BLOCK
-        if (relativePath === '' || !relativePath.startsWith('..')) {
+        // Path starting with '..' means it escapes outside the app directory - BLOCK
+        // Empty string (same directory) or any other path means it's within - ALLOW
+        if (!relativePath.startsWith('..')) {
           console.log('will-navigate: allowing app-internal file:// protocol', url);
           return;
         } else {
